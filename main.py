@@ -5,9 +5,6 @@ import sys
 from config import BOT_TOKEN
 
 
-token = BOT_TOKEN
-
-
 class Connect:
     def __init__(self, token):
         self.session = "null"
