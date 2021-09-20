@@ -7,7 +7,7 @@ from config import BOT_TOKEN
 
 class Connect:
     def __init__(self, token):
-        self.session = "null"
+        self.sequence = "null"
         self.token = token
         asyncio.run(self.main())
 
@@ -22,7 +22,7 @@ class Connect:
         while True:
             jsonPayload = {
                 "op": 1,
-                "d": self.session
+                "d": self.sequence
             }
             await self.send_json(ws, jsonPayload)
             print('HEARTBEAT SENT')
@@ -43,21 +43,35 @@ class Connect:
         }
         await self.send_json(ws, identify_payload)
 
+    async def resume(self, ws):
+        resume_payload = {
+            {
+                "op": 6,
+                "d": {
+                    "token": self.token,
+                    "session_id": self.session_id,
+                    "seq": self.sequence
+                }
+            }
+        }
+        await self.send_json(ws, resume_payload)
+
     async def main(self):
         async with websockets.connect("wss://gateway.discord.gg/?v=9&encoding=json") as ws:
             event = await self.rec_json(ws)
             try:
                 heartbeat_interval = event["d"]["heartbeat_interval"] / 1000
-                self.session = event['s']
+                self.sequence = event['s']
                 print("successfully connected to gateway")
             except Exception as e:
                 sys.exit(e)
-            task1 = asyncio.create_task(
+            asyncio.create_task(
                 self.send_heartbeats(ws, heartbeat_interval))
             await self.identify(ws)
             while True:
                 event = await self.rec_json(ws)
                 if event["t"] == 'READY':
+                    self.session_id = event['d']['session_id']
                     print("bot is now ready")
                 elif event["op"] == 11:
                     print('HEARTBEAT RECEIVED')
@@ -69,7 +83,7 @@ class Connect:
                     await self.send_json(ws, jsonPayload)
                 else:
                     print(event)
-                self.session = event['s']
+                self.sequence = event['s']
 
 
 if __name__ == "__main__":
