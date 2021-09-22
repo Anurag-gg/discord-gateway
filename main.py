@@ -58,21 +58,19 @@ class Connect:
 
     async def main(self):
         async with websockets.connect("wss://gateway.discord.gg/?v=9&encoding=json") as ws:
-            event = await self.rec_json(ws)
-            try:
-                heartbeat_interval = event["d"]["heartbeat_interval"] / 1000
-                self.sequence = event['s']
-                print("successfully connected to gateway")
-            except Exception as e:
-                sys.exit(e)
-            asyncio.create_task(
-                self.send_heartbeats(ws, heartbeat_interval))
-            await self.identify(ws)
             while True:
                 event = await self.rec_json(ws)
-                if event["t"] == 'READY':
+                if event["op"] == 10:
+                    heartbeat_interval = event["d"]["heartbeat_interval"] / 1000
+                    print("successfully connected to gateway")
+                    asyncio.create_task(
+                        self.send_heartbeats(ws, heartbeat_interval))
+                    await self.identify(ws)
+
+                elif event["t"] == 'READY':
                     self.session_id = event['d']['session_id']
                     print("bot is now ready")
+
                 elif event["op"] == 11:
                     print('HEARTBEAT RECEIVED')
                 elif event["op"] == 1:
@@ -83,6 +81,7 @@ class Connect:
                     await self.send_json(ws, jsonPayload)
                 else:
                     print(event)
+
                 self.sequence = event['s']
 
 
