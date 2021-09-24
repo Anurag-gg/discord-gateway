@@ -1,7 +1,6 @@
 import asyncio
 import websockets
 import json
-import sys
 from config import BOT_TOKEN
 
 
@@ -9,6 +8,8 @@ class Connect:
     def __init__(self, token):
         self.sequence = "null"
         self.token = token
+        self.heartbeat_received = True
+        self.status = 'identity'
         asyncio.run(self.main())
 
     async def send_json(self, ws, message):
@@ -20,20 +21,28 @@ class Connect:
 
     async def send_heartbeats(self, ws, interval):
         while True:
-            jsonPayload = {
-                "op": 1,
-                "d": self.sequence
-            }
-            await self.send_json(ws, jsonPayload)
-            print('HEARTBEAT SENT')
-            await asyncio.sleep(interval)
+            if self.heartbeat_received:
+                jsonPayload = {
+                    "op": 1,
+                    "d": self.sequence
+                }
+                await self.send_json(ws, jsonPayload)
+                print('HEARTBEAT SENT')
+                self.heartbeat_received = False
+                await asyncio.sleep(interval)
+            else:
+                print("no heartbeat_ack received")
+                ws.frames.Close(1011, reason=None)
+                self.status = "resume"
+                await self.main()
+                break
 
     async def identify(self, ws):
         identify_payload = {
             "op": 2,
             "d": {
                 "token": self.token,
-                "intents": 513,
+                "intents": 16383,
                 "properties": {
                     "$os": "linux",
                     "$browser": "my_library",
@@ -65,7 +74,10 @@ class Connect:
                     print("successfully connected to gateway")
                     asyncio.create_task(
                         self.send_heartbeats(ws, heartbeat_interval))
-                    await self.identify(ws)
+                    if self.status == "identity":
+                        await self.identify(ws)
+                    else:
+                        await self.resume(ws)
 
                 elif event["t"] == 'READY':
                     self.session_id = event['d']['session_id']
@@ -73,12 +85,20 @@ class Connect:
 
                 elif event["op"] == 11:
                     print('HEARTBEAT RECEIVED')
+                    self.heartbeat_received = True
+
                 elif event["op"] == 1:
+                    print("op code 1 received")
                     jsonPayload = {
                         "op": 1,
-                        "d": "null"
+                        "d": self.sequence
                     }
                     await self.send_json(ws, jsonPayload)
+
+                elif event["op"] == 7:
+                    print("reconnecting")
+                    await self.resume(ws)
+
                 else:
                     print(event)
 
